@@ -12,7 +12,7 @@ Bassline Junkie DSP is a small C++17 audio DSP library built with CMake. It focu
 ## Build
 
 ```bash
-cmake -S . -B build -G "Unix Makefiles"
+cmake -S . -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
@@ -38,6 +38,8 @@ You can also choose the output path and waveform:
 ```
 
 The example writes a 12 second, mono, 48 kHz, 16-bit PCM WAV file.
+It also normalizes the rendered buffer to leave a little headroom, which
+avoids clipping on the hotter square and saw sweeps.
 
 ## Library Overview
 

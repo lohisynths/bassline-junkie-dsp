@@ -3,6 +3,7 @@
  * @brief Implementation of the BLIT-style bandlimited oscillator.
  */
 #include "bassline_junkie_dsp/blit_oscillator.hpp"
+#include "bassline_junkie_dsp/fast_trig.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -13,9 +14,6 @@
 namespace bassline_junkie::dsp {
 
 namespace {
-
-constexpr double kPi = 3.141592653589793238462643383279502884;
-constexpr double kTwoPi = 2.0 * kPi;
 
 [[nodiscard]] std::string lowercase(std::string_view text)
 {
@@ -122,44 +120,64 @@ std::size_t BlitOscillator::harmonicLimit() const noexcept
 double BlitOscillator::processSaw() const noexcept
 {
     const std::size_t maxHarmonic = harmonicLimit();
-    const double angle = kTwoPi * phase_;
+    const double angle = fast_trig::kTwoPi * phase_;
     double sum = 0.0;
 
     for (std::size_t harmonic = 1; harmonic <= maxHarmonic; ++harmonic) {
-        sum += std::sin(angle * static_cast<double>(harmonic)) / static_cast<double>(harmonic);
+        const double harmonicValue = static_cast<double>(harmonic);
+        sum += fast_trig::fastSin(angle * harmonicValue) / harmonicValue;
     }
 
-    return (2.0 / kPi) * sum;
+    return (2.0 / fast_trig::kPi) * sum;
 }
 
 double BlitOscillator::processSquare() const noexcept
 {
     const std::size_t maxHarmonic = harmonicLimit();
-    const double angle = kTwoPi * phase_;
-    double sum = 0.0;
+    const double angle = fast_trig::kTwoPi * phase_;
+    const fast_trig::SinCos base = fast_trig::fastSinCosPhase(angle);
+    const double stepSine = 2.0 * base.sin * base.cos;
+    const double stepCosine = base.cos * base.cos - base.sin * base.sin;
 
-    for (std::size_t harmonic = 1; harmonic <= maxHarmonic; harmonic += 2) {
-        sum += std::sin(angle * static_cast<double>(harmonic)) / static_cast<double>(harmonic);
+    double sine = base.sin;
+    double cosine = base.cos;
+    double sum = sine;
+
+    for (std::size_t harmonic = 3; harmonic <= maxHarmonic; harmonic += 2) {
+        const double nextSine = sine * stepCosine + cosine * stepSine;
+        const double nextCosine = cosine * stepCosine - sine * stepSine;
+        sine = nextSine;
+        cosine = nextCosine;
+        sum += sine / static_cast<double>(harmonic);
     }
 
-    return (4.0 / kPi) * sum;
+    return (4.0 / fast_trig::kPi) * sum;
 }
 
 double BlitOscillator::processTriangle() const noexcept
 {
     const std::size_t maxHarmonic = harmonicLimit();
-    const double angle = kTwoPi * phase_;
-    double sum = 0.0;
-    bool positive = true;
+    const double angle = fast_trig::kTwoPi * phase_;
+    const fast_trig::SinCos base = fast_trig::fastSinCosPhase(angle);
+    const double stepSine = 2.0 * base.sin * base.cos;
+    const double stepCosine = base.cos * base.cos - base.sin * base.sin;
 
-    for (std::size_t harmonic = 1; harmonic <= maxHarmonic; harmonic += 2) {
+    double sine = base.sin;
+    double cosine = base.cos;
+    double sum = sine;
+    double sign = 1.0;
+
+    for (std::size_t harmonic = 3; harmonic <= maxHarmonic; harmonic += 2) {
+        const double nextSine = sine * stepCosine + cosine * stepSine;
+        const double nextCosine = cosine * stepCosine - sine * stepSine;
+        sine = nextSine;
+        cosine = nextCosine;
+        sign = -sign;
         const double harmonicValue = static_cast<double>(harmonic);
-        const double sign = positive ? 1.0 : -1.0;
-        sum += sign * std::sin(angle * harmonicValue) / (harmonicValue * harmonicValue);
-        positive = !positive;
+        sum += sign * sine / (harmonicValue * harmonicValue);
     }
 
-    return (8.0 / (kPi * kPi)) * sum;
+    return (8.0 / (fast_trig::kPi * fast_trig::kPi)) * sum;
 }
 
 constexpr std::string_view BlitOscillator::waveformName(Waveform waveform) noexcept

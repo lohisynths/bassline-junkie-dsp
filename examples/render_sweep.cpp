@@ -92,19 +92,29 @@ int main(int argc, char** argv)
         constexpr double durationSeconds = 12.0;
         constexpr double startFrequency = 50.0;
         constexpr double endFrequency = 20'000.0;
-        constexpr double outputGain = 0.90;
+        constexpr double targetPeak = 0.95;
 
         const std::size_t totalSamples = static_cast<std::size_t>(std::llround(durationSeconds * static_cast<double>(sampleRate)));
         std::vector<float> samples;
         samples.reserve(totalSamples);
 
         bassline_junkie::dsp::BlitOscillator oscillator(static_cast<double>(sampleRate), waveform);
+        double peak = 0.0;
 
         for (std::size_t index = 0; index < totalSamples; ++index) {
             const double progress = totalSamples > 1 ? static_cast<double>(index) / static_cast<double>(totalSamples - 1U) : 1.0;
             const double frequency = startFrequency * std::pow(endFrequency / startFrequency, progress);
             oscillator.setFrequency(frequency);
-            samples.push_back(static_cast<float>(oscillator.processSample() * outputGain));
+            const float sample = static_cast<float>(oscillator.processSample());
+            peak = std::max(peak, static_cast<double>(std::abs(sample)));
+            samples.push_back(sample);
+        }
+
+        if (peak > 0.0) {
+            const double gain = targetPeak / peak;
+            for (float& sample : samples) {
+                sample = static_cast<float>(sample * gain);
+            }
         }
 
         writePcm16Mono(outputPath, samples, sampleRate);
@@ -118,4 +128,3 @@ int main(int argc, char** argv)
         return 1;
     }
 }
-
